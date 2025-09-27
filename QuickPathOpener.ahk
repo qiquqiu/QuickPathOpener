@@ -1,11 +1,9 @@
 ﻿; =================================================================================
-; QuickPath Opener v2 - AutoHotkey (v2) 脚本
+; QuickPath Opener v3 - AutoHotkey (v3) 脚本
 ;
-; [v2 更新日志]
-;   - 新增: 如果路径是一个文件，则自动打开其所在的父文件夹。
-;   - 新增: 智能修正，将路径中的正斜杠 '/' 替换为反斜杠 '\'。
-;   - 新增: 智能修正，支持识别并清理 'file:///' URI 格式的路径。
-;   - 优化: 路径清理逻辑，能更好地处理末尾的斜杠。
+; [v3 更新日志]
+;   - 修复: 当 file:/// 路径被双引号包裹时无法正确识别的 Bug。
+;   - 优化: 调整了路径清理步骤的顺序，将“去除引号”操作提前，以确保后续处理的正确性。
 ;
 ; [核心功能]
 ;   - 拦截 Win+E 快捷键。
@@ -37,24 +35,25 @@ $#e::
     ; a) 移除路径前后的所有空格和制表符
     path := Trim(path)
 
-    ; b) [新增] 处理 "file:///" URI 格式
+    ; b) 如果路径被英文双引号包裹，则【优先】移除双引号
+    if (SubStr(path, 1, 1) = """" and SubStr(path, 0) = """")
+    {
+        StringTrimLeft, path, path, 1
+        StringTrimRight, path, path, 1
+        ; 再次 Trim，可以处理引号内部可能存在的空格，例如 " D:\folder "
+        path := Trim(path)
+    }
+    
+    ; c) 现在，在没有引号干扰的情况下，处理 "file:///" URI 格式
     if (SubStr(path, 1, 8) = "file:///")
     {
         StringTrimLeft, path, path, 8
     }
 
-    ; c) [新增] 将所有正斜杠 '/' 替换为反斜杠 '\'
+    ; d) 将所有正斜杠 '/' 替换为反斜杠 '\'
     StringReplace, path, path, /, \, All
 
-    ; d) 如果路径被英文双引号包裹，则移除双引号
-    if (SubStr(path, 1, 1) = """" and SubStr(path, 0) = """")
-    {
-        StringTrimLeft, path, path, 1
-        StringTrimRight, path, path, 1
-    }
-    
-    ; e) [优化] 移除末尾的斜杠，除非路径本身就是一个根目录 (例如 "C:\")
-    ;    这样可以正确处理 "D:\folder\" 和 "D:\file.txt\" 这种输入
+    ; e) 移除末尾的斜杠，除非路径本身就是一个根目录 (例如 "C:\")
     if (SubStr(path, 0) = "\" and StrLen(path) > 3)
     {
         StringTrimRight, path, path, 1
@@ -73,16 +72,15 @@ $#e::
         Run, explorer.exe "%path%"
     }
     ; b) 如果不是文件夹，检查它是否指向一个存在的文件
-    ;    (只要 FileExist 返回值不是空，就说明它存在)
     else if (file_attributes != "")
     {
-        ; [新增] 是文件，获取其父目录并打开
-        SplitPath, path, , parentDir ; 分割路径，将目录部分存入 parentDir 变量
+        ; 是文件，获取其父目录并打开
+        SplitPath, path, , parentDir
         Run, explorer.exe "%parentDir%"
     }
     else
     {
-        ; c) 如果路径不存在，或者不是文件也不是文件夹，则执行原始的 Win+E 功能
+        ; c) 如果路径不存在，则执行原始的 Win+E 功能
         Send, #e
     }
     return
